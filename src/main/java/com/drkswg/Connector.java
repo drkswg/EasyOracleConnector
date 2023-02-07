@@ -19,7 +19,7 @@ public class Connector {
         this.url = url;
         this.userName = userName;
         this.password = password;
-        this.connection = DriverManager.getConnection(url, userName, Arrays.toString(password));
+        this.connection = DriverManager.getConnection(url, userName, String.valueOf(password));
     }
 
     public void reconnect() throws SQLException {
