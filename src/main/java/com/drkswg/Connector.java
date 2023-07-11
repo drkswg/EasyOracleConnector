@@ -124,13 +124,42 @@ public class Connector {
     public final <A> List<Map<String, Object>> getResultSet(String query, List<String> columns, A... args)
             throws SQLException {
         List<Map<String, Object>> returnSet = new ArrayList<>();
-        PreparedStatement preparedSelect = connection.prepareStatement(query);
 
-        for (int i = 0; i < args.length; i++) {
-            preparedSelect.setObject(i + 1, args[i]);
+        for (int i = 0, position = 1; i < args.length; i++) {
+            if (args[i] instanceof List) {
+                List<Object> list = (List<Object>) args[i];
+                StringBuilder positionMarks = new StringBuilder();
+
+                for (int j = 0; j < list.size(); j++) {
+                    if (j < list.size() - 1) {
+                        positionMarks.append("?,");
+                    } else {
+                        positionMarks.append("?");
+                    }
+                }
+
+                query = query.replace(String.format("{%s}", position), positionMarks);
+                position++;
+            }
         }
 
-        ResultSet resultSet = preparedSelect.executeQuery();
+        PreparedStatement statement = connection.prepareStatement(query);
+
+        for (int i = 0, position = 1; i < args.length; i++) {
+            if (args[i] instanceof List) {
+                List<Object> list = (List<Object>) args[i];
+
+                for (Object o : list) {
+                    statement.setObject(position, o);
+                    position++;
+                }
+            } else {
+                statement.setObject(position, args[i]);
+                position++;
+            }
+        }
+
+        ResultSet resultSet = statement.executeQuery();
 
         while (resultSet.next()) {
             Map<String, Object> row = new HashMap<>();
@@ -143,20 +172,21 @@ public class Connector {
             returnSet.add(row);
         }
 
-        preparedSelect.close();
+        resultSet.close();
+        statement.close();
 
         return returnSet;
     }
 
     @SafeVarargs
     public final <A> void executeDml(String query, A... args) throws SQLException {
-        PreparedStatement preparedInsert = connection.prepareStatement(query);
+        PreparedStatement statement = connection.prepareStatement(query);
 
         for (int i = 0; i < args.length; i++) {
-            preparedInsert.setObject(i + 1, args[i]);
+            statement.setObject(i + 1, args[i]);
         }
 
-        preparedInsert.executeUpdate();
-        preparedInsert.close();
+        statement.executeUpdate();
+        statement.close();
     }
 }
