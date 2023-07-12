@@ -1,6 +1,7 @@
 package com.drkswg;
 
 import com.drkswg.exceptions.NoDataFoundException;
+import com.drkswg.exceptions.WrongPlaceholdersCountException;
 
 import java.math.BigDecimal;
 import java.sql.*;
@@ -8,6 +9,8 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.Date;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Connector {
     private final String url;
@@ -124,69 +127,70 @@ public class Connector {
     public final <A> List<Map<String, Object>> getResultSet(String query, List<String> columns, A... args)
             throws SQLException {
         List<Map<String, Object>> returnSet = new ArrayList<>();
+        List<A> argsList = new ArrayList<>();
+        int listCount = 0;
+        int listPlaceHolderCount = 0;
 
-        for (int i = 0, position = 1; i < args.length; i++) {
-            if (args[i] instanceof List) {
-                List<Object> list = (List<Object>) args[i];
-                StringBuilder positionMarks = new StringBuilder();
-
-                for (int j = 0; j < list.size(); j++) {
-                    if (j < list.size() - 1) {
-                        positionMarks.append("?,");
-                    } else {
-                        positionMarks.append("?");
-                    }
-                }
-
-                query = query.replace(String.format("{%s}", position), positionMarks);
-                position++;
-            }
-        }
-
-        PreparedStatement statement = connection.prepareStatement(query);
-
-        for (int i = 0, position = 1; i < args.length; i++) {
-            if (args[i] instanceof List) {
-                List<Object> list = (List<Object>) args[i];
-
-                for (Object o : list) {
-                    statement.setObject(position, o);
-                    position++;
-                }
+        for (A arg : args) {
+            if (arg instanceof List) {
+                argsList.addAll((List<A>) arg);
+                listCount++;
             } else {
-                statement.setObject(position, args[i]);
-                position++;
+                argsList.add(arg);
             }
         }
 
-        ResultSet resultSet = statement.executeQuery();
+        Pattern pattern = Pattern.compile("\\{}");
+        Matcher matcher = pattern.matcher(query);
 
-        while (resultSet.next()) {
-            Map<String, Object> row = new HashMap<>();
-
-            for (String column : columns) {
-                Object cell = resultSet.getObject(column);
-                row.put(column, cell);
-            }
-
-            returnSet.add(row);
+        while (matcher.find()) {
+            listPlaceHolderCount++;
         }
 
-        resultSet.close();
-        statement.close();
+        if (listCount != listPlaceHolderCount) {
+            throw new WrongPlaceholdersCountException("Lists count does not match list placeholders count");
+        }
+
+        for (int i = 0; i < args.length; i++) {
+            if (args[i] instanceof List) {
+                List<A> list = (List<A>) args[i];
+                query = query.replaceFirst(
+                        "\\{}",
+                        String.join(",", Collections.nCopies(list.size(), "?"))
+                );
+            }
+        }
+
+        try (PreparedStatement statement = connection.prepareStatement(query)) {
+            for (int i = 0; i < argsList.size(); i++) {
+                statement.setObject(i + 1, argsList.get(i));
+            }
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    Map<String, Object> row = new HashMap<>();
+
+                    for (String column : columns) {
+                        Object cell = resultSet.getObject(column);
+                        row.put(column, cell);
+                    }
+
+                    returnSet.add(row);
+                }
+            }
+        }
 
         return returnSet;
     }
 
     @SafeVarargs
     public final <A> void executeDml(String query, A... args) throws SQLException {
-        PreparedStatement statement = connection.prepareStatement(query);
+        try (PreparedStatement statement = connection.prepareStatement(query)) {
+            for (int i = 0; i < args.length; i++) {
+                statement.setObject(i + 1, args[i]);
+            }
 
-        for (int i = 0; i < args.length; i++) {
-            statement.setObject(i + 1, args[i]);
+            statement.executeUpdate();
         }
-
-        statement.executeUpdate();
-        statement.close();
     }
 }
