@@ -24,8 +24,14 @@ for (Map<String, Object> row : resultSet) {
 }
 ```
 
-***Get value from result set (returns null if empty):***
+***List-as-args:***
+
+You can use any numbers of Lists, placeholder will always be {}
+
+(so far only for SELECT statements)
+
 ```java
-int id = connector.getInteger(row.get("id"));
-String name = connector.getString(row.get("name"));
+String multipleRowSelect = "SELECT id, name FROM users WHERE id IN ({})";
+List<String> columns = Arrays.asList("id", "name");
+List<Map<String, Object>> resultSet = connector.getResultSet(multipleRowSelect, columns, Arrays.asList(1, 2, 3));
 ```
