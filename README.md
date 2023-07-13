@@ -23,9 +23,3 @@ for (Map<String, Object> row : resultSet) {
   // your code
 }
 ```
-
-***Get value from result set (returns null if empty):***
-```java
-int id = connector.getInteger(row.get("id"));
-String name = connector.getString(row.get("name"));
-```
